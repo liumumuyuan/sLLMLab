@@ -1,0 +1,142 @@
+######################################################################
+##### data preparation
+## C4, newslike, 13.8m texts
+
+dprp:
+    pretraining_data_folder: 'pretraining/data/c4/'
+    pretraining_train_data: 'c4_text_train.json'
+    pretraining_vali_data: 'c4_text_validation.json'
+
+    sft_data_folder: 'sft/data/squad/'
+    sft_train_data: 'squad_train.json'
+    sft_vali_data: 'squad_validation.json'
+
+    reward_model_data_folder: 'reward_model/data/'
+    reward_model_train_data: 'reward_model_training_data.json'
+    reward_model_vali_data: 'reward_model_validation_data.json'
+
+    RLHF_data_folder: 'rlhf/data/'
+    RLHF_train_data: 'rlhf_training_data.json'
+    RLHF_vali_data: 'rlhf_validation_data.json'
+
+######################################################################
+##### tokenizer
+tknz:
+    tool: 'tiktoken' #OpenAI
+    version: 'gpt2'
+    pad_token_id: 0
+    eos_token_id: 50256
+
+######################################################################
+##### hyperparameter
+hypp:
+    seed: 42 #TODO: not implemented yet
+
+    device: 'cuda' #or 'cpu'
+    n_layer: 6 #6
+    n_head: 8 #8
+    embd_dim: 256 #256
+    window_size: 256 #256
+
+    dropout: 0.1 #0.2, or 0 for large text corpus
+    use_dyt: False #for dynamic tanh of Kaiming He
+    dyt_alpha: 0.2
+
+    max_new_tokens: 100 # length of maximum generation for inferencing
+
+######################################################################
+##### pretraining
+prt:
+    lr: 0.0003
+    batch_size: 32
+    epochs: 1 #
+    eval_iters: 5  #for averaging the loss in evalutions
+    eval_itvl: 1000 #frequency for evaluation
+
+    folder: 'pretraining/train/'
+    model_path: 'pretraining/train/pretrained_model.pt'
+    loss_path: 'pretraining/train/losses.json'
+
+    data_folder: 'pretraining/data/c4/'
+    train_data: 'pretraining/data/c4/c4_text_train.json'
+    vali_data: 'pretraining/data/c4/c4_text_validation.json'
+
+######################################################################
+##### supervised finetuning
+sft:
+    lr: 0.0001
+    batch_size: 16
+    epochs: 1 #
+    eval_iters: 5
+    eval_itvl: 10
+
+    folder: 'sft/'
+    model_init_path: 'pretraining/train/pretrained_model.pt'
+    model_path: 'sft/sft_model.pt'
+    loss_path: 'sft/stf_losses.json'
+
+    data_folder: 'sft/data/squad/'
+    train_data: 'sft/data/squad/squad_train.json'
+    vali_data: 'sft/data/squad/squad_validation.json'
+
+######################################################################
+##### Reward Model
+##### In GPTinstruct paper, the reward model is trained based on a smaller sft model
+##### compared to the sft model for RLHF. ok to use the same sft model for limited resources.
+rwm:
+    lr: 0.0001
+    batch_size: 32
+    epochs: 1 #
+    eval_iters: 5
+    eval_itvl: 10
+
+    max_prompted_tokens: 100 # used fro generating multiple replies given prompt from data
+    K: 3 #number of prompting
+
+    # more advanced LLMs for playing the role of humman feedback, gemma3:27b under Ollama server installed on a Macbook pro M3/128GB used here.
+    host_ip: "192.168.124.13"  # host IP where Ollama installed
+    url: "http://192.168.124.13:11434/api/generate"
+    payload: {"model": "gemma3:27b", "prompt": "", "stream": False} # send response after complete generation
+    #response: requests.post(url, json=payload)
+    prompt: 'You are given two answers to the same prompt. If the first answer is better, respond with 1. If the second answer is better, respond with -1. IMPORTANT: Respond with ONLY a single token — either 1 or -1. Do NOT include any explanation, punctuation, or extra text, etc.'
+
+    folder: 'reward_model/'
+    prompting_model_path: 'sft/sft_model.pt'
+    model_init_path: 'sft/sft_model.pt' #might or mihgt not be the same as promping_model_path, the prompting model can be a larger one, or even other LLMs
+    model_path: 'reward_model/reward_model.pt'
+    loss_path: 'reward_model/reward_model_loss.json'
+
+    data_folder: 'reward_model/data/'
+    train_data: 'reward_model/data/reward_model_training_data.json'
+    vali_data: 'reward_model/data/reward_model_validation_data.json'
+
+######################################################################
+##### Reinforcement Learning with Human Feedback
+rlhf:
+    lr: 0.0001
+    inner_batch_size: 2
+    epochs: 1 #
+    eval_itvl: 2
+    gamma: 0.99 #for PPO
+    gae_lambda: 0.95 #for PPO
+    policy_clip: 0.2 #for PPO
+    N: 4
+    epochs_experience: 2
+    minsize_experience_buffer: 2
+    max_len_episode: 100
+
+    train_data: 'rlhf/data/rlhf_training_data.json'
+    vali_data: 'rlhf/data/rlhf_validation_data.json'
+
+    folder: 'rlhf/'
+    sft_model_path: 'sft/sft_model.pt'
+    reward_model_path: 'reward_model/reward_model.pt'
+    actor_critic_model_init_path: 'sft/sft_model.pt'
+    result_model_path: 'rlhf/rlhf_result_model.pt'
+    scores_path: 'rlhf/scores.pt'
+
+######################################################################
+##### chat
+inference:
+    model_path: 'rlhf/rlhf_result_model.pt'
+    max_new_tokens: 100

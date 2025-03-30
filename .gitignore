@@ -1,0 +1,6 @@
+__pycache__/
+*.pyc
+*.pt
+*.json
+*.yaml.log
+*.png
